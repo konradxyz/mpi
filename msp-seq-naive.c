@@ -153,7 +153,7 @@ int main(int argc, char * argv[])
             ((double) endTime.tv_sec + ((double) endTime.tv_usec / 1000000.0)) -
             ((double) startTime.tv_sec + ((double) startTime.tv_usec / 1000000.0));
 
-    fprintf(stderr, "PWIR2014_Jan_Kowalski_123456 Input: (%d,%d,%d) Solution: |(%d,%d),(%d,%d)|=%lld Time: %.10f\n",
+    fprintf(stderr, "PWIR2014_Konrad_Paziewski_306410 Input: (%d,%d,%d) Solution: |(%d,%d),(%d,%d)|=%lld Time: %.10f\n",
             numRows, numColumns, seed,
             bestJ, bestI, bestK, bestL, maxSum, duration);
 

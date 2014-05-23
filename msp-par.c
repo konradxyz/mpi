@@ -266,6 +266,7 @@ int main(int argc, char * argv[])
 {
     int numRows, numColumns, seed, myRank, proc_count, i;
     long long int* matrix;
+    double             duration;
     struct timeval     startTime;
     struct timeval     endTime;
     result_t result;
@@ -315,10 +316,24 @@ int main(int argc, char * argv[])
       if ( !result.has_value ) { //max is negative
         find_matrix_max(numRows, numColumns, matrix, &result);
       }
+
+      if (gettimeofday(&endTime, NULL))
+      {
+        fprintf(stderr, "ERROR: Gettimeofday failed!\n");
+        free(matrix);
+        fail();
+      }
+      
+      duration =
+            ((double) endTime.tv_sec + ((double) endTime.tv_usec / 1000000.0)) -
+            ((double) startTime.tv_sec + ((double) startTime.tv_usec / 1000000.0));
+
+
+
       fprintf(stderr, 
           "PWIR2014_Konrad_Paziewski_306410 Input: (%d,%d,%d) Solution: |(%d,%d),(%d,%d)|=%lld Time: %.10f\n",
             numRows, numColumns, seed,
-            result.l + 1, result.u + 1, result.r + 1, result.b + 1, result.value, 0.0f);
+            result.u + 1, result.l + 1, result.b + 1, result.r + 1, result.value, duration);
 
 
 
