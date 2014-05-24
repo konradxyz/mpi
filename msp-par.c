@@ -9,6 +9,15 @@
 
 #define MSG_SIZE 6
 #define MPI_MAX_TAG 1234
+
+void fail() {
+  fprintf(stderr, "Error\n");
+  MPI_Finalize();
+  exit(1);
+}
+
+
+//For debug/profiling purposes
 //#define DEBUG
 
 #ifdef DEBUG
@@ -18,11 +27,36 @@
 #endif
 
 
-typedef struct {
-  long long int value;
-  int l, u, r, b;
-  int has_value;
-} result_t;
+static void printDuration(struct timeval* startTime, const char* msg) {
+  double duration;
+  struct timeval endTime;
+  if (gettimeofday(&endTime, NULL))
+  {
+    fprintf(stderr, "ERROR: Gettimeofday failed!\n");
+    fail();
+  } 
+      
+  duration =
+            ((double) endTime.tv_sec + ((double) endTime.tv_usec / 1000000.0)) -
+            ((double) startTime->tv_sec + ((double) startTime->tv_usec / 1000000.0));
+
+  fprintf(stderr, "%s, Time: %.10f\n", msg, duration); 
+}
+struct timeval start;
+
+
+void start_timer() {
+  if (gettimeofday(&start, NULL))
+  {
+    fprintf(stderr, "ERROR: Gettimeofday failed!\n");
+    fail();
+  } 
+}
+
+void stop_timer(const char* msg) {
+  printDuration(&start, msg);
+}
+
 
 static void printUsage(char const * prog)
 {
@@ -58,6 +92,15 @@ static void printMatrixI(int const * m, int r, int c)
     printf("\n");
 }
 
+
+//algorithm
+typedef struct {
+  long long int value;
+  int l, u, r, b;
+  int has_value;
+} result_t;
+
+
 long long int* generate_matrix(int numRows, int numColumns, int seed) {
     matgen_t *         matgenPtr;
     long long int *    matrixPtr; 
@@ -86,12 +129,6 @@ long long int* generate_matrix(int numRows, int numColumns, int seed) {
     return matrixPtr;
 }
 
-void fail() {
-  fprintf(stderr, "Error\n");
-  MPI_Finalize();
-  exit(1);
-}
-
 int* rank_responsible(int procCount, int numRows) {
   long long i, j;
   int* result = calloc(numRows, numRows * sizeof(*result));
@@ -116,7 +153,7 @@ int* rank_responsible(int procCount, int numRows) {
         result[i * numRows + j] = -1;
     }
   }
-  if ( current_rank >= procCount ) { //ERROR
+  if ( current_rank >= procCount ) {
     fprintf(stderr, "Error counting responsible %d %d\n", 
         procCount, current_rank_count);
     free(result);
@@ -143,31 +180,30 @@ int find_partial_MSP(int rank, int procCount, int numRows, int numColumns,
     long long int* matrix, result_t* res) {
   long long* partial_cols = NULL;
   long long i, j, k;
+  DBG(start_timer());
   int* resp = rank_responsible(procCount, numRows);
   if ( resp == NULL )
     return 1;
-  DBG(printMatrixI(resp, numRows, numRows));
   partial_cols = partial_columns(numRows, numColumns, matrix);
-  DBG(printMatrix(partial_cols, numRows + 1, numColumns + 1));
+  DBG(stop_timer("Preparing exec plan"));
   if ( partial_cols == NULL )
     return 1;
-  res->has_value = 0;
+  res->value = -1;
+  DBG(start_timer());
   for ( i = 0; i < numRows; i++ ) {
     for ( j = i; j < numRows; j++ ) {
       if ( resp[i * numRows + j] == rank ) {
         long long sum = 0;
         int start = 0;
         for ( k = 0; k < numColumns; k++ ) {
-          DBG(fprintf(stderr, "%d %d %d\n", i, j, k));
           sum += partial_cols[(j + 1) * (numColumns + 1) + k + 1] 
             - partial_cols[i * (numColumns + 1) + k + 1];
           if ( sum <= 0 ) {
             sum = 0;
             start = k + 1;
           } else {
-            if ( !res->has_value || res->value < sum ) {
+            if ( res->value < sum ) {
               res->value = sum;
-              res->has_value = 1;
               res->l = start;
               res->r = k;
               res->u = i;
@@ -178,6 +214,9 @@ int find_partial_MSP(int rank, int procCount, int numRows, int numColumns,
       }
     }
   }
+  DBG(stop_timer("main loop"));
+  res->has_value = res->value >= 0 ? 1 : 0;
+
   DBG(fprintf(stderr, "Rank %d, has value %d Solution: |(%d,%d),(%d,%d)|=%lld\n",
     rank, res->has_value, res->l + 1, res->u + 1, res->r + 1, res->b + 1, 
     res->value));
@@ -261,6 +300,31 @@ void find_matrix_max(int numRows, int numColumns, long long* matrix, result_t* r
   res->value = matrix[mi * numColumns + mj];
 }
 
+long long* transpose(long long* matrix, int numRows, int numCols) {
+  int i, j;
+  long long* res = calloc(numCols, numRows * sizeof(*res));
+  if ( res == NULL ) {
+    fprintf(stderr, "calloc failed");
+    return NULL;
+  }
+  for ( i = 0; i < numRows; i++ ) {
+    for ( j = 0; j < numCols; j++ ) {
+      res[j * numRows + i] = matrix[i * numCols + j];
+    }
+  }
+  return res;
+}
+
+void transpose_result(result_t* res) {
+  int u = res->l;
+  int b = res->r;
+  int l = res->u;
+  int r = res->b;
+  res->l = l;
+  res->r = r;
+  res->u = u;
+  res->b = b;
+}
 
 int main(int argc, char * argv[])
 {
@@ -291,7 +355,6 @@ int main(int argc, char * argv[])
         fail(); 
     }
     matrix = generate_matrix(numRows, numColumns, seed);
-    DBG(printMatrix(matrix, numRows, numColumns));
     if ( matrix == NULL ) {
         fail();
     }
@@ -302,7 +365,20 @@ int main(int argc, char * argv[])
         free(matrix);
         fail();
     }
-    
+    int transposed = numRows > numColumns; 
+    if ( transposed ) {
+      long long* tmp = transpose(matrix, numRows, numColumns);
+      if ( tmp == NULL ) {
+        free(matrix);
+        fail();
+      }
+      free(matrix);
+      matrix = tmp;
+      int tmpr = numRows;
+      numRows = numColumns;
+      numColumns = tmpr;
+
+    }
     MPI_Comm_rank(MPI_COMM_WORLD, &myRank);
     MPI_Comm_size(MPI_COMM_WORLD, &proc_count);
 
@@ -310,12 +386,15 @@ int main(int argc, char * argv[])
       free(matrix);
       fail();
     }
-
+    DBG(printDuration(&startTime, "Find partial msp")); 
     if ( myRank == 0 ) {
       gather_max(proc_count, &result);
       if ( !result.has_value ) { //max is negative
         find_matrix_max(numRows, numColumns, matrix, &result);
       }
+
+      if ( transposed )
+        transpose_result(&result);
 
       if (gettimeofday(&endTime, NULL))
       {
