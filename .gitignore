@@ -1,3 +1,7 @@
 *.swp
 *~
 *.exe
+*.o
+*.hi
+_*.err
+test

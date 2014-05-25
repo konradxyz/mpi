@@ -179,7 +179,7 @@ long long* partial_columns(int numRows, int numColumns, long long* matrix) {
 int find_partial_MSP(int rank, int procCount, int numRows, int numColumns, 
     long long int* matrix, result_t* res) {
   long long* partial_cols = NULL;
-  long long i, j, k;
+  int i, j, k;
   DBG(start_timer());
   int* resp = rank_responsible(procCount, numRows);
   if ( resp == NULL )
@@ -190,26 +190,35 @@ int find_partial_MSP(int rank, int procCount, int numRows, int numColumns,
     return 1;
   res->value = -1;
   DBG(start_timer());
-  for ( i = 0; i < numRows; i++ ) {
-    for ( j = i; j < numRows; j++ ) {
+  for ( i = 0; i < numRows; ++i ) {
+    for ( j = i; j < numRows; ++j ) {
       if ( resp[i * numRows + j] == rank ) {
+	long long* mi = partial_cols + (long long) i * (long long) (numColumns + 1) + 1;
+	long long* mj = partial_cols + (long long) (j + 1) * (long long) (numColumns + 1) + 1;
         long long sum = 0;
         int start = 0;
-        for ( k = 0; k < numColumns; k++ ) {
-          sum += partial_cols[(j + 1) * (numColumns + 1) + k + 1] 
-            - partial_cols[i * (numColumns + 1) + k + 1];
-          if ( sum <= 0 ) {
+        int bstart = 0;
+        int bend = 0;
+        long long bvalue = -1;
+        for ( k = 0; k < numColumns; ++k ) {
+       	  sum += mj[k] - mi[k];
+	  if ( sum <= 0 ) {
             sum = 0;
             start = k + 1;
           } else {
-            if ( res->value < sum ) {
-              res->value = sum;
-              res->l = start;
-              res->r = k;
-              res->u = i;
-              res->b = j;
+            if ( bvalue < sum ) {
+              bvalue = sum;
+              bstart = start;
+              bend = k;
             }
           }
+        }
+        if ( bvalue > res->value ) {
+          res->value = bvalue;
+          res->l = bstart;
+          res->r = bend;
+          res->u = i;
+          res->b = j;
         }
       }
     }
@@ -358,7 +367,7 @@ int main(int argc, char * argv[])
     if ( matrix == NULL ) {
         fail();
     }
-
+    MPI_Barrier(MPI_COMM_WORLD);
     if (gettimeofday(&startTime, NULL))
     {
         fprintf(stderr, "ERROR: Gettimeofday failed!\n");
@@ -393,9 +402,12 @@ int main(int argc, char * argv[])
         find_matrix_max(numRows, numColumns, matrix, &result);
       }
 
-      if ( transposed )
+      if ( transposed ){
         transpose_result(&result);
-
+        int tmp = numRows;
+        numRows = numColumns;
+        numColumns = tmp;
+      }
       if (gettimeofday(&endTime, NULL))
       {
         fprintf(stderr, "ERROR: Gettimeofday failed!\n");
