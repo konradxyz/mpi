@@ -1,3 +1,0 @@
-Sun May 25 17:45:56 CEST 2014
-mpirun -np 32 -mode VN ./msp-par.exe 4000 250 113
-PWIR2014_Konrad_Paziewski_306410 Input: (4000,250,113) Solution: |(1951,9),(3811,140)|=49011627 Time: 0.1345968246

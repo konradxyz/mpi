@@ -19,7 +19,9 @@ all: msp-seq-naive.exe msp-par.exe
 
 %.o: %.c matgen.h Makefile
 	$(MPICC) -O3 -c -o $@ $<
+test: test.hs
+	ghc test.hs
 
 clean:
-	rm -f *.o *core *~ *.out *.err *.exe
+	rm -f *.o *core *~ *.out *.err *.exe test
 

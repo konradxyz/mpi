@@ -193,8 +193,8 @@ int find_partial_MSP(int rank, int procCount, int numRows, int numColumns,
   for ( i = 0; i < numRows; ++i ) {
     for ( j = i; j < numRows; ++j ) {
       if ( resp[i * numRows + j] == rank ) {
-	long long* mi = partial_cols + (long long) i * (long long) (numColumns + 1) + 1;
-	long long* mj = partial_cols + (long long) (j + 1) * (long long) (numColumns + 1) + 1;
+        long long* mi = partial_cols + (long long) i * (long long) (numColumns + 1) + 1;
+        long long* mj = partial_cols + (long long) (j + 1) * (long long) (numColumns + 1) + 1;
         long long sum = 0;
         int start = 0;
         int bstart = 0;
@@ -397,11 +397,12 @@ int main(int argc, char * argv[])
     }
     DBG(printDuration(&startTime, "Find partial msp")); 
     if ( myRank == 0 ) {
+      DBG(start_timer());
       gather_max(proc_count, &result);
       if ( !result.has_value ) { //max is negative
         find_matrix_max(numRows, numColumns, matrix, &result);
       }
-
+      DBG(stop_timer("gather max"));
       if ( transposed ){
         transpose_result(&result);
         int tmp = numRows;
